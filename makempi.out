@@ -1,0 +1,1 @@
+mpigcc -O3 -lm -Wall mpi_skeleton.c utils.c -o mpi_skeleton
