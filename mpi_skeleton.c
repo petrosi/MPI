@@ -113,7 +113,7 @@ int main(int argc, char ** argv) {
 
     //----Rank 0 sends the global matrix----//
 	
-	if(rank==0){
+	/*if(rank==0){
 		//For every process in the grid
 		for(int i=0; i<grid[0]; ++i){
 			for(int j=0; j<grid[1]; ++j){
@@ -134,13 +134,40 @@ int main(int argc, char ** argv) {
 							);
 					}
 				}
+				else{
+					//Copy local[0] rows instead of sending
+						for(int i=0; i<local[0]; ++i)
+							for(int j=0; j<local[1]; ++j)
+								u_previous[i+1][j+1]=U[i][j];
+				}
 			}
 		}
 	}
-	
+	*/
+	/*
+	if(rank==0){
+		//Copy local[0] rows instead of sending
+		for(int i=0; i<local[0]; ++i)
+			for(int j=0; j<local[1]; ++j)
+				u_previous[i+1][j+1]=U[i][j];
+		for(int i=1; i<size; ++i){
+			for(int r=0; r<local[0]; ++r){
+				MPI_Send(
+						&U[0][0]+scatteroffset[i]+r*global_padded[1],
+						local[1],
+						MPI_DOUBLE,
+						i,
+						i,
+						MPI_COMM_WORLD
+					);
+			}
+		}
+	}
+
 	//Each process receives the local data
 	for(int r=0; r<local[0]; ++r){	
-		MPI_Recv(
+		if(rank!=0){
+			MPI_Recv(
 					&u_previous[1][1] + r*(local[1]+2),
 					local[1],
 					MPI_DOUBLE,
@@ -149,8 +176,41 @@ int main(int argc, char ** argv) {
 					MPI_COMM_WORLD,
 					MPI_STATUS_IGNORE
 				);
-	}
+		}
+	}*/
+	if(rank==0){
+		//Copy local[0] rows instead of sending
+		for(int i=0; i<local[0]; ++i)
+			for(int j=0; j<local[1]; ++j)
+				u_previous[i+1][j+1]=U[i][j];
+		for(int i=1; i<size; ++i){
+				MPI_Send(
+						&U[0][0]+scatteroffset[i],
+						1,
+						global_block,
+						i,
+						i,
+						MPI_COMM_WORLD
+					);
+			}
+		}
+
+
+	//Each process receives the local data
+		if(rank!=0){
+			MPI_Recv(
+					&u_previous[1][1],
+					1,
+					local_block,
+					0,
+					rank,
+					MPI_COMM_WORLD,
+					MPI_STATUS_IGNORE
+				);
+		}
 	
+	for(int i=0; i<size; ++i){ MPI_Barrier(CART_COMM); if(rank==i) {print2d(u_previous, local[0]+2, local[1]+2); printf("\n");}}
+
     //----Rank 0 scatters the global matrix----//
 
 	//*************TODO*******************//
