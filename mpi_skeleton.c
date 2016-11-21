@@ -121,37 +121,34 @@ int main(int argc, char ** argv) {
 				//Find the rank
 				int target_rank;
 				MPI_Cart_rank(CART_COMM, tmp_rank_grid, &target_rank);
-				//Send local[0] rows to each process
-				for(int r=0; r<local[0]; ++r){
-					MPI_Send(
-								U+scatteroffset[i*grid[1]+j]+r*global_padded[1],
+				if(target_rank!=0){
+					//Send local[0] rows to each process
+					for(int r=0; r<local[0]; ++r){
+						MPI_Send(
+								&U[0][0]+scatteroffset[i*grid[1]+j]+r*global_padded[1],
 								local[1],
-								MPI_INT,
+								MPI_DOUBLE,
 								target_rank,
 								target_rank,
 								MPI_COMM_WORLD
 							);
+					}
 				}
 			}
 		}
 	}
-   
+	
 	//Each process receives the local data
 	for(int r=0; r<local[0]; ++r){	
 		MPI_Recv(
 					&u_previous[1][1] + r*(local[1]+2),
 					local[1],
-					MPI_INT,
+					MPI_DOUBLE,
 					0,
 					rank,
 					MPI_COMM_WORLD,
 					MPI_STATUS_IGNORE
 				);
-	}
-
-	if(rank_grid[0]==(grid[0]-1) && rank_grid[1]==(grid[1]-1)){
-		printf("I am (%d, %d) and my matrix is:\n", rank_grid[0], rank_grid[1]);
-		print2d(u_previous, local[0], local[1]);
 	}
 	
     //----Rank 0 scatters the global matrix----//
