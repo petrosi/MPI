@@ -5,6 +5,7 @@
 #include <mpi.h>
 #include "utils.h"
 
+#define TEST_CONV
 int main(int argc, char ** argv) {
 		int rank,size;
 		int global[2],local[2]; //global matrix dimensions and local matrix dimensions (2D-domain, 2D-subdomain)
@@ -20,6 +21,8 @@ int main(int argc, char ** argv) {
 
 		double ** U, ** u_current, ** u_previous, ** swap; //Global matrix, local current and previous matrices, pointer to swap between current and previous
 
+		
+		gettimeofday(&tts,NULL);
 
 		MPI_Init(&argc,&argv);
 		MPI_Comm_size(MPI_COMM_WORLD,&size);
@@ -219,10 +222,6 @@ int main(int argc, char ** argv) {
 		if(rank_grid[1]==0) j_min++;
 		if(rank_grid[1]==grid[1]-1) j_max-=(global_padded[1]-global[1]+1);
 
-		for(int i=0; i<local[0]+2; ++i)
-			for(int j=0; j<local[1]+2; ++j)
-				u_previous[i][j]=u_current[i][j];
-
 		for(int i=0; i<size; ++i) { if(rank==i) printf("Process[%d]: Xmin: %d Xmax: %d Ymin: %d Ymax: %d \n", rank, i_min, i_max, j_min, j_max); }
 		
 		MPI_Datatype COL;
@@ -249,7 +248,14 @@ int main(int argc, char ** argv) {
 		//************************************//
 
 
+		gettimeofday(&tcs, NULL);
 
+		for(int i=0; i<local[0]+2; ++i)
+			for(int j=0; j<local[1]+2; ++j)
+				u_previous[i][j]=u_current[i][j];
+
+		gettimeofday(&tcf, NULL);
+		tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
 		//----Computational core----//   
 #ifdef TEST_CONV
@@ -257,7 +263,7 @@ int main(int argc, char ** argv) {
 #endif
 #ifndef TEST_CONV
 #undef T
-#define T 5300
+#define T 256
 				for (t=0;t<T;t++) {
 #endif
 
@@ -276,7 +282,7 @@ int main(int argc, char ** argv) {
 
 						/*Add appropriate timers for computation*/
 
-						double **swap;
+						gettimeofday(&tcs, NULL);
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
@@ -287,6 +293,8 @@ int main(int argc, char ** argv) {
 							}
 						}
 
+						gettimeofday(&tcf, NULL);
+						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
 						if(north!=-1) MPI_Send(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD);
 						if(south!=-1) MPI_Send(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
@@ -300,7 +308,6 @@ int main(int argc, char ** argv) {
 						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
-	
 
 
 
@@ -315,8 +322,10 @@ int main(int argc, char ** argv) {
 						if (t%C==0) {
 								//*************TODO**************//
 								/*Test convergence*/
-
-
+								converged=converge(u_previous,u_current,local[0]+2,local[1]+2);
+								MPI_Barrier(MPI_COMM_WORLD);
+								printf("Process[%d]: %d\n", rank, converged);
+								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_PROD, MPI_COMM_WORLD);
 						}		
 #endif
 
@@ -327,7 +336,6 @@ int main(int argc, char ** argv) {
 
 				}
 				
-
 				gettimeofday(&ttf,NULL);
 
 				ttotal=(ttf.tv_sec-tts.tv_sec)+(ttf.tv_usec-tts.tv_usec)*0.000001;
@@ -351,6 +359,22 @@ int main(int argc, char ** argv) {
 				/*Fill your code here*/
 
 
+				//Each process sends the local data
+				if(rank!=0) MPI_Send(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD);
+
+				//----Rank 0 gathers the global matrix----//
+				if(rank==0){
+
+					//Copy local[0] rows instead of receiving
+					for(int i=0; i<local[0]; ++i)
+						for(int j=0; j<local[1]; ++j)
+							U[i][j]=u_current[i+1][j+1];
+
+					//Receive the corresponding block from each process
+					for(int i=1; i<size; ++i) MPI_Recv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				}
+
+
 
 
 
@@ -368,8 +392,9 @@ int main(int argc, char ** argv) {
 				//----Printing results----//
 
 				//**************TODO: Change "Jacobi" to "GaussSeidelSOR" or "RedBlackSOR" for appropriate printing****************//
+				
 
-				printf("%lf midpoint\n", u_current[1][1]);
+
 				if (rank==0) {
 						printf("Jacobi X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
 
