@@ -3,10 +3,10 @@ CFLAGS=-std=c11 -O3 -lm -Wall
 RES=-DPRINT_RESULTS
 CONV=-DTEST_CONV
 
-all: mpi
+all: Jacobi
 
-mpi: mpi_skeleton.c utils.c
-	$(MPI) $(CFLAGS) $(RES) $(CONV) mpi_skeleton.c utils.c -o mpi_skeleton
+Jacobi: Jacobi.c utils.c
+	$(MPI) $(CFLAGS) $(RES) $(CONV) Jacobi.c utils.c -o Jacobi
 
 clean:
 	rm mpi_skeleton
