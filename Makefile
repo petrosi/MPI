@@ -9,5 +9,5 @@ Jacobi: Jacobi.c utils.c
 	$(MPI) $(CFLAGS) $(RES) $(CONV) Jacobi.c utils.c -o Jacobi
 
 clean:
-	rm mpi_skeleton
+	rm Jacobi
 
