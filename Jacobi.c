@@ -278,9 +278,9 @@ int main(int argc, char ** argv) {
 						if (t%C==0) {
 								/*Test convergence*/
 								converged=converge(u_previous,u_current,local[0]+2,local[1]+2); //Check local convergence
-								MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
+								//MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
 								//printf("Process[%d]: %d\n", rank, converged); //DEBUG PRINTING
-								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_PROD, MPI_COMM_WORLD); //global_converged=1 only if all have converged
+								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD); //global_converged=1 only if all have converged
 						}		
 #endif
 				}
