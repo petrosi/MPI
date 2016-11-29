@@ -250,7 +250,22 @@ int main(int argc, char ** argv) {
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
+//if(t==0) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {printf("rank=%d about to send to north %d elements\n", rank, j_max-j_min); for(int k=1; k<=j_max-j_min+1; k++) printf("%.3lf\t",u_current[1][k]); printf("\n\n");} }
+						if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
 
+						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
+						if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
+						if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
+
+						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+																													 //&req);
+						if(south!=-1) MPI_Recv(&u_current[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+																														//&req);
+						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+MPI_Barrier(CART_COMM);
+
+//if(t==0) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {print2d(u_current,local[0]+2, local[1]+2); printf("\n\n");} }
 						for(int i=i_min; i<i_max; ++i){
 							for(int j=j_min; j<j_max; ++j){
 								u_current[i][j]=(u_previous[i-1][j]+u_previous[i][j-1]+u_previous[i+1][j]+u_previous[i][j+1])/4.0;
@@ -259,7 +274,7 @@ int main(int argc, char ** argv) {
 
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
-
+/*
 						if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
 						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
 						if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
@@ -273,7 +288,7 @@ int main(int argc, char ** argv) {
 																									//&req);
 						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 																										//&req);
-
+*/
 #ifdef TEST_CONV
 						if (t%C==0) {
 								/*Test convergence*/
