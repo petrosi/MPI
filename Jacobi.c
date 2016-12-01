@@ -19,9 +19,9 @@ int main(int argc, char ** argv) {
 		double ttotal=0,tcomp=0,total_time,comp_time;
 
 		double ** U, ** u_current, ** u_previous, ** swap; //Global matrix, local current and previous matrices, pointer to swap between current and previous
-		
+
 		MPI_Request req;
-		
+
 		gettimeofday(&tts,NULL);
 
 		MPI_Init(&argc,&argv);
@@ -128,7 +128,7 @@ int main(int argc, char ** argv) {
 
 		//Each process receives the local data
 		if(rank!=0) MPI_Recv(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																						//&req);
+		//&req);
 
 		/**** DEBUG SECTION ****/
 		//if(rank==0) print2d(U, global_padded[0], global_padded[1]);
@@ -143,20 +143,20 @@ int main(int argc, char ** argv) {
 		//----Find the 4 neighbors with which a process exchanges messages----//
 
 		int north, south, east, west;
-		
+
 		north = south = east = west = -1;
 		if(rank_grid[0]!=0 && rank_grid[1]!=0 && rank_grid[0]!=grid[0]-1 && rank_grid[1]!=grid[1]-1){
-			north=rank-grid[1];
-			south=rank+grid[1];
-			east=rank+1;
-			west=rank-1;
+				north=rank-grid[1];
+				south=rank+grid[1];
+				east=rank+1;
+				west=rank-1;
 		}
 		if(rank_grid[0]!=0) north = rank-grid[1];
 		if(rank_grid[1]!=0) west = rank-1;
 		if(rank_grid[0]!=grid[0]-1) south = rank+grid[1];
 		if(rank_grid[1]!=grid[1]-1) east = rank+1;
-		
-		
+
+
 		/**** DEBUG SECTION ****/
 		//for(int i=0; i<size; ++i) { if(rank==i) printf("Process[%d]: N: %d S: %d W: %d E: %d \n", rank, north, south, west, east); }		
 		/***********************/
@@ -170,18 +170,18 @@ int main(int argc, char ** argv) {
 		//---Define the iteration ranges per process-----//
 
 		int i_min,i_max,j_min,j_max;
-		
+
 		//If the process is not in the right or the bottom border then:
 		//Starting X point:		[1][1]
 		//Ending X point:		[local[0]][1]
 		//Starting Y point:		[1][1]
 		//Ending Y point:		[local[0]][local[1]]
-		
+
 		i_min=1;
 		i_max=local[0]+1;
 		j_min=1;
 		j_max=local[1]+1;
-		
+
 		//If the process is in the top border:
 		//Starting X point: 	[2][1]
 		//If the process is in the bottom border:
@@ -196,14 +196,14 @@ int main(int argc, char ** argv) {
 		if(rank_grid[1]==grid[1]-1) j_max-=(global_padded[1]-global[1]+1);
 
 		/**** DEBUG SECTION ****/
-		//for(int i=0; i<size; ++i) { if(rank==i) printf("Process[%d]: Xmin: %d Xmax: %d Ymin: %d Ymax: %d \n", rank, i_min, i_max, j_min, j_max); }
+		//for(int i=0; i<size; ++i) { if(rank==i) printf("Process[%d]: StartingPoint:(%d,%d) EndingPoint(%d,%d) \n", rank, i_min, j_min, i_max-1, j_max-1); }
 		/***********************/
-		
+
 		/* Define appropriate datatype for table column */
 		MPI_Datatype COL;
 		MPI_Type_vector(i_max-i_min+1,1,local[1]+2,MPI_DOUBLE,&COL);
 		MPI_Type_commit(&COL);
-		
+
 
 		/*Fill your code here*/
 
@@ -227,8 +227,8 @@ int main(int argc, char ** argv) {
 		gettimeofday(&tcs, NULL);
 
 		for(int i=0; i<local[0]+2; ++i)
-			for(int j=0; j<local[1]+2; ++j)
-				u_previous[i][j]=u_current[i][j];
+				for(int j=0; j<local[1]+2; ++j)
+						u_previous[i][j]=u_current[i][j];
 
 		gettimeofday(&tcf, NULL);
 		tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
@@ -246,51 +246,87 @@ int main(int argc, char ** argv) {
 
 						/*Add appropriate timers for computation*/
 
-						gettimeofday(&tcs, NULL);
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
 
-						if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
-						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
+						if(north!=-1) MPI_Isend(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
+						if(south!=-1) MPI_Isend(&u_previous[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
 
-if(t==1) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {printf("rank=%d about to send to west %d elements\n", rank, j_max-j_min); for(int k=1; k<=i_max-i_min+1; k++) printf("%lf\t",u_current[k][1]); printf("\n\n");} }
-MPI_Barrier(CART_COMM);
+						/**** DEBUG SECTION ****/
+						/*
+						if(t==1)
+								for(int i=0; i<size; i++){
+										MPI_Barrier(CART_COMM);
+										if(rank==i){
+												printf("rank=%d about to send to west %d elements\n", rank, j_max-j_min);
+												for(int k=1; k<=i_max-i_min+1; k++) printf("%lf\t",u_current[k][1]);
+												printf("\n\n");
+										}
+								}
+						MPI_Barrier(CART_COMM);
+						*/
+						/***********************/
 
-						if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
-						if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
+						if(west!=-1) MPI_Isend(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
+						if(east!=-1) MPI_Isend(&u_previous[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
 
-						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(south!=-1) MPI_Recv(&u_current[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-MPI_Barrier(CART_COMM);
+						if(north!=-1) MPI_Recv(&u_previous[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(south!=-1) MPI_Recv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(west!=-1) MPI_Recv(&u_previous[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(east!=-1) MPI_Recv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						//MPI_Barrier(CART_COMM);
 
-if(t==1) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {print2d(u_current,local[0]+2, local[1]+2); printf("\n\n");} }
+						/**** DEBUG SECTION ****/
+						/*
+						if(t==1)
+								for(int i=0; i<size; i++){
+										MPI_Barrier(CART_COMM);
+										if(rank==i){
+												printf("Process[%d]:\n", rank);
+												print2d(u_current,local[0]+2, local[1]+2);
+												printf("\n\n");
+										}
+								}
+						*/
+						/***********************/
+						gettimeofday(&tcs, NULL);
 						for(int i=i_min; i<i_max; ++i){
-							for(int j=j_min; j<j_max; ++j){
-								u_current[i][j]=(u_previous[i-1][j]+u_previous[i][j-1]+u_previous[i+1][j]+u_previous[i][j+1])/4.0;
-							}
+								for(int j=j_min; j<j_max; ++j){
+										u_current[i][j]=(u_previous[i-1][j]+u_previous[i][j-1]+u_previous[i+1][j]+u_previous[i][j+1])/4.0;
+								}
 						}
-if(t==1) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {print2d(u_current,local[0]+2, local[1]+2); printf("\n\n");} }
+						/**** DEBUG SECTION ****/
+						/*
+						if(t<=1)
+								for(int i=0; i<size; i++){
+										MPI_Barrier(CART_COMM);
+										if(rank==i){
+												printf("Process[%d]:\n", rank);
+												print2d(u_current,local[0]+2, local[1]+2);
+												printf("\n\n");
+										}
+								}
+						*/
+						/***********************/
 
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
-/*
-						if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
-						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
-						if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
-						if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
+						/*
+						   if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
+						   if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
+						   if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
+						   if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
 
-						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																													 //&req);
+						   if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						//&req);
 						if(south!=-1) MPI_Recv(&u_current[i_max][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																														//&req);
+						//&req);
 						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																									//&req);
+						//&req);
 						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																										//&req);
-*/
+						//&req);
+						 */
 #ifdef TEST_CONV
 						if (t%C==0) {
 								/*Test convergence*/
@@ -301,7 +337,7 @@ if(t==1) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {print2d
 						}		
 #endif
 				}
-				
+
 				gettimeofday(&ttf,NULL);
 
 				ttotal=(ttf.tv_sec-tts.tv_sec)+(ttf.tv_usec-tts.tv_usec)*0.000001;
@@ -323,20 +359,20 @@ if(t==1) for(int i=0; i<size; i++) {MPI_Barrier(CART_COMM); if(rank==i) {print2d
 				//----Rank 0 gathers the global matrix----//
 				if(rank==0){
 
-					//Copy local[0] rows instead of receiving
-					for(int i=0; i<local[0]; ++i)
-						for(int j=0; j<local[1]; ++j)
-							U[i][j]=u_current[i+1][j+1];
+						//Copy local[0] rows instead of receiving
+						for(int i=0; i<local[0]; ++i)
+								for(int j=0; j<local[1]; ++j)
+										U[i][j]=u_current[i+1][j+1];
 
-					//Receive the corresponding block from each process
-					for(int i=1; i<size; ++i) MPI_Recv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						//Receive the corresponding block from each process
+						for(int i=1; i<size; ++i) MPI_Recv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 				}
 
 				//----Printing results----//
 
 				//**************TODO: Change "Jacobi" to "GaussSeidelSOR" or "RedBlackSOR" for appropriate printing****************//
-				
+
 				if (rank==0) {
 						printf("Jacobi X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
 
