@@ -206,8 +206,6 @@ int main(int argc, char ** argv) {
 		/*Fill your code here*/
 
 
-						if(south!=-1) MPI_Send(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
-						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 
 
 
@@ -250,7 +248,15 @@ int main(int argc, char ** argv) {
 						u_previous=u_current;
 						u_current=swap;
 
-						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(north!=-1) MPI_Send(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD);
+						if(west!=-1) MPI_Send(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD);
+
+						if(south!=-1) MPI_Recv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(east!=-1) MPI_Recv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+						if(south!=-1) MPI_Send(&u_previous[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
+						if(east!=-1) MPI_Send(&u_previous[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
+						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 						gettimeofday(&tcs, NULL);
@@ -264,14 +270,7 @@ int main(int argc, char ** argv) {
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
-						if(north!=-1) MPI_Send(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD);
-						if(west!=-1) MPI_Send(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD);
 
-						if(south!=-1) MPI_Recv(&u_current[i_max][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-						if(south!=-1) MPI_Send(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
-						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 
 #ifdef TEST_CONV
 						if (t%C==0) {
