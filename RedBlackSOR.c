@@ -200,11 +200,14 @@ int main(int argc, char ** argv) {
 		/***********************/
 		
 		/* Define appropriate datatype for table column */
-		MPI_Datatype COL;
-		MPI_Type_vector(i_max-i_min+1,1,local[1]+2,MPI_DOUBLE,&COL);
-		MPI_Type_commit(&COL);
 		
 
+		MPI_Datatype ROW;
+		MPI_Type_vector(local[1]/2, 1, 2, MPI_DOUBLE, &ROW);
+		MPI_Type_commit(&ROW);
+		MPI_Datatype COL;
+		MPI_Type_vector((i_max-i_min+1)/2, 1, 2*(local[1]+2),MPI_DOUBLE,&COL);
+		MPI_Type_commit(&COL);
 		/*Fill your code here*/
 
 
@@ -251,28 +254,40 @@ int main(int argc, char ** argv) {
 						u_previous=u_current;
 						u_current=swap;
 
-						for(int i=i_min; i<i_max; ++i){
-							for(int j=j_min; j<j_max; ++j){
-								u_current[i][j]=(u_previous[i-1][j]+u_previous[i][j-1]+u_previous[i+1][j]+u_previous[i][j+1])/4.0;
-							}
-						}
+                        if(north!=-1) MPI_Isend(&u_previous[1][2], 1, ROW, north, 17, MPI_COMM_WORLD, &req);
+                        if(south!=-1) MPI_Isend(&u_previous[i_max-1][2], 1, ROW, south, 17, MPI_COMM_WORLD, &req);
+                        if(west!=-1) MPI_Isend(&u_previous[2][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
+                        if(east!=-1) MPI_Isend(&u_previous[2][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
 
+						if(north!=-1) MPI_Recv(&u_previous[0][2], 1, ROW, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(south!=-1) MPI_Recv(&u_previous[i_max][2], 1, ROW, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(west!=-1) MPI_Recv(&u_previous[2][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(east!=-1) MPI_Recv(&u_previous[2][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+						for (int i=i_min;i<i_max;i++)
+							for (int j=j_min;j<j_max;j++)
+								if ((i+j)%2==0)
+									u_current[i][j]=u_previous[i][j]+(omega/4.0)*(u_previous[i-1][j]+u_previous[i+1][j]+u_previous[i][j-1]+u_previous[i][j+1]-4*u_previous[i][j]);            
+
+
+                        if(north!=-1) MPI_Isend(&u_current[1][1], 1, ROW, north, 19, MPI_COMM_WORLD, &req);
+                        if(south!=-1) MPI_Isend(&u_current[i_max-1][1], 1, ROW, south, 19, MPI_COMM_WORLD, &req);
+                        if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 19, MPI_COMM_WORLD, &req);
+                        if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 19, MPI_COMM_WORLD, &req);
+
+						if(north!=-1) MPI_Recv(&u_current[0][1], 1, ROW, north, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(south!=-1) MPI_Recv(&u_current[i_max][1], 1, ROW, south, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+
+						for(int i=i_min;i<i_max;i++)
+							for (j=j_min;j<j_max;j++)
+								if ((i+j)%2==1)
+									u_current[i][j]=u_previous[i][j]+(omega/4.0)*(u_current[i-1][j]+u_current[i+1][j]+u_current[i][j-1]+u_current[i][j+1]-4*u_previous[i][j]);
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
-						if(north!=-1) MPI_Isend(&u_current[1][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
-						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
-						if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
-						if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
-
-						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																													 //&req);
-						if(south!=-1) MPI_Recv(&u_current[i_max][1], j_max-j_min, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																														//&req);
-						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																									//&req);
-						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																										//&req);
 
 #ifdef TEST_CONV
 						if (t%C==0) {
