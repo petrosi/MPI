@@ -254,8 +254,6 @@ int main(int argc, char ** argv) {
 						if(south!=-1) MPI_Recv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-						if(south!=-1) MPI_Send(&u_previous[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
-						if(east!=-1) MPI_Send(&u_previous[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -270,12 +268,16 @@ int main(int argc, char ** argv) {
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
-
+						if(south!=-1) MPI_Send(&u_current[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
+						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 
 #ifdef TEST_CONV
 						if (t%C==0) {
+								gettimeofday(&tcs, NULL);
 								/*Test convergence*/
 								converged=converge(u_previous,u_current,local[0]+2,local[1]+2); //Check local convergence
+								gettimeofday(&tcf, NULL);
+								tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 								//MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
 								//printf("Process[%d]: %d\n", rank, converged); //DEBUG PRINTING
 								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD); //global_converged=1 only if all have converged
@@ -319,12 +321,12 @@ int main(int argc, char ** argv) {
 				//**************TODO: Change "Jacobi" to "GaussSeidelSOR" or "RedBlackSOR" for appropriate printing****************//
 				
 				if (rank==0) {
-						printf("Jacobi X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
+						printf("Gauss-Seidel X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
 
 
 #ifdef PRINT_RESULTS
 						char * s=malloc(50*sizeof(char));
-						sprintf(s,"resJacobiMPI_%dx%d_%dx%d",global[0],global[1],grid[0],grid[1]);
+						sprintf(s,"resGaussSeidelMPI_%dx%d_%dx%d",global[0],global[1],grid[0],grid[1]);
 						fprint2d(s,U,global[0],global[1]);
 						free(s);
 #endif

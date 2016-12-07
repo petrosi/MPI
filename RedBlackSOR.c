@@ -236,6 +236,11 @@ int main(int argc, char ** argv) {
 		gettimeofday(&tcf, NULL);
 		tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
+		if(north!=-1) MPI_Send(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD);
+		if(south!=-1) MPI_Send(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD);
+		if(west!=-1) MPI_Send(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD);
+		if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
+
 		//----Computational core----//   
 #ifdef TEST_CONV
 		for (t=0;t<T && !global_converged;t++) {
@@ -249,38 +254,39 @@ int main(int argc, char ** argv) {
 
 						/*Add appropriate timers for computation*/
 
-						gettimeofday(&tcs, NULL);
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
 
-                        if(north!=-1) MPI_Isend(&u_previous[1][2], 1, ROW, north, 17, MPI_COMM_WORLD, &req);
-                        if(south!=-1) MPI_Isend(&u_previous[i_max-1][2], 1, ROW, south, 17, MPI_COMM_WORLD, &req);
-                        if(west!=-1) MPI_Isend(&u_previous[2][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
-                        if(east!=-1) MPI_Isend(&u_previous[2][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
-
-						if(north!=-1) MPI_Recv(&u_previous[0][2], 1, ROW, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						//Receive Black
+						if(north!=-1) MPI_Recv(&u_previous[0][1], 1, ROW, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(south!=-1) MPI_Recv(&u_previous[i_max][2], 1, ROW, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(west!=-1) MPI_Recv(&u_previous[2][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(west!=-1) MPI_Recv(&u_previous[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_previous[2][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
+						
+						//Compute Red	
+						gettimeofday(&tcs, NULL);
 						for (int i=i_min;i<i_max;i++)
 							for (int j=j_min;j<j_max;j++)
 								if ((i+j)%2==0)
-									u_current[i][j]=u_previous[i][j]+(omega/4.0)*(u_previous[i-1][j]+u_previous[i+1][j]+u_previous[i][j-1]+u_previous[i][j+1]-4*u_previous[i][j]);            
+									u_current[i][j]=u_previous[i][j]+(omega/4.0)*(u_previous[i-1][j]+u_previous[i+1][j]+u_previous[i][j-1]+u_previous[i][j+1]-4*u_previous[i][j]);            				
+						gettimeofday(&tcf, NULL);
+						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
+						//Send Red
+			                        if(north!=-1) MPI_Send(&u_current[1][1], 1, ROW, north, 19, MPI_COMM_WORLD);
+                       				if(south!=-1) MPI_Send(&u_current[i_max-1][2], 1, ROW, south, 19, MPI_COMM_WORLD);
+                        			if(west!=-1) MPI_Send(&u_current[1][1], 1, COL, west, 19, MPI_COMM_WORLD);
+                      				if(east!=-1) MPI_Send(&u_current[2][j_max-1], 1, COL, east, 19, MPI_COMM_WORLD);
 
-                        if(north!=-1) MPI_Isend(&u_current[1][1], 1, ROW, north, 19, MPI_COMM_WORLD, &req);
-                        if(south!=-1) MPI_Isend(&u_current[i_max-1][1], 1, ROW, south, 19, MPI_COMM_WORLD, &req);
-                        if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 19, MPI_COMM_WORLD, &req);
-                        if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 19, MPI_COMM_WORLD, &req);
-
-						if(north!=-1) MPI_Recv(&u_current[0][1], 1, ROW, north, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						//Receive Red
+						if(north!=-1) MPI_Recv(&u_current[0][2], 1, ROW, north, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(south!=-1) MPI_Recv(&u_current[i_max][1], 1, ROW, south, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(west!=-1) MPI_Recv(&u_current[2][0], 1, COL, west, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-
+						//Compute Black			
+						gettimeofday(&tcs, NULL);
 						for(int i=i_min;i<i_max;i++)
 							for (j=j_min;j<j_max;j++)
 								if ((i+j)%2==1)
@@ -288,12 +294,20 @@ int main(int argc, char ** argv) {
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
+						//Send Black
+						if(north!=-1) MPI_Send(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD);
+						if(south!=-1) MPI_Send(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD);
+						if(west!=-1) MPI_Send(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD);
+						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 
 #ifdef TEST_CONV
 						if (t%C==0) {
 								/*Test convergence*/
+								gettimeofday(&tcs, NULL);
 								converged=converge(u_previous,u_current,local[0]+2,local[1]+2); //Check local convergence
-								MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
+								gettimeofday(&tcf, NULL);
+								tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
+								//MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
 								//printf("Process[%d]: %d\n", rank, converged); //DEBUG PRINTING
 								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_PROD, MPI_COMM_WORLD); //global_converged=1 only if all have converged
 						}		
@@ -336,12 +350,12 @@ int main(int argc, char ** argv) {
 				//**************TODO: Change "Jacobi" to "GaussSeidelSOR" or "RedBlackSOR" for appropriate printing****************//
 				
 				if (rank==0) {
-						printf("Jacobi X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
+						printf("Red-Black X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
 
 
 #ifdef PRINT_RESULTS
 						char * s=malloc(50*sizeof(char));
-						sprintf(s,"resJacobiMPI_%dx%d_%dx%d",global[0],global[1],grid[0],grid[1]);
+						sprintf(s,"resRedBlackMPI_%dx%d_%dx%d",global[0],global[1],grid[0],grid[1]);
 						fprint2d(s,U,global[0],global[1]);
 						free(s);
 #endif
