@@ -122,7 +122,7 @@ int main(int argc, char ** argv) {
 								u_current[i+1][j+1]=U[i][j];
 
 				//Send the corresponding block to each process
-				for(int i=1; i<size; ++i) MPI_Isend(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, &req);
+				for(int i=1; i<size; ++i) MPI_Send(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD);
 		}
 
 
@@ -330,7 +330,7 @@ int main(int argc, char ** argv) {
 				}
 
 				//Each process sends the local data
-				if(rank!=0) MPI_Isend(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, &req);
+				if(rank!=0) MPI_Send(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD);
 
 				//----Rank 0 gathers the global matrix----//
 				if(rank==0){

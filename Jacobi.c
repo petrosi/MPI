@@ -122,7 +122,7 @@ int main(int argc, char ** argv) {
 								u_current[i+1][j+1]=U[i][j];
 
 				//Send the corresponding block to each process
-				for(int i=1; i<size; ++i) MPI_Isend(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, &req);
+				for(int i=1; i<size; ++i) MPI_Send(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD);
 		}
 
 
@@ -250,8 +250,8 @@ int main(int argc, char ** argv) {
 						u_previous=u_current;
 						u_current=swap;
 
-						if(north!=-1) MPI_Isend(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, &req);
-						if(south!=-1) MPI_Isend(&u_previous[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, &req);
+						if(north!=-1) MPI_Send(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD);
+						if(south!=-1) MPI_Send(&u_previous[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
 
 						/**** DEBUG SECTION ****/
 						/*
@@ -268,14 +268,15 @@ int main(int argc, char ** argv) {
 						*/
 						/***********************/
 
-						if(west!=-1) MPI_Isend(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD, &req);
-						if(east!=-1) MPI_Isend(&u_previous[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, &req);
+						if(west!=-1) MPI_Send(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD);
+						if(east!=-1) MPI_Send(&u_previous[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
 
 						if(north!=-1) MPI_Recv(&u_previous[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(south!=-1) MPI_Recv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(west!=-1) MPI_Recv(&u_previous[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						//MPI_Barrier(CART_COMM);
+
 
 						/**** DEBUG SECTION ****/
 						/*
@@ -354,7 +355,7 @@ int main(int argc, char ** argv) {
 				}
 
 				//Each process sends the local data
-				if(rank!=0) MPI_Isend(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, &req);
+				if(rank!=0) MPI_Send(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD);
 
 				//----Rank 0 gathers the global matrix----//
 				if(rank==0){
@@ -387,3 +388,4 @@ int main(int argc, char ** argv) {
 				MPI_Finalize();
 				return 0;
 		}
+
