@@ -15,12 +15,15 @@ int main(int argc, char ** argv) {
 		MPI_Datatype dummy;     //dummy datatype used to align user-defined datatypes in memory
 		double omega; 			//relaxation factor - useless for Jacobi
 
-		struct timeval tts,ttf,tcs,tcf;   //Timers: total-tts,ttf, computation-tcs,tcf
-		double ttotal=0,tcomp=0,total_time,comp_time;
+		struct timeval tts,ttf,tcs,tcf,tconvs,tconvf;   //Timers: total-tts,ttf, computation-tcs,tcf
+		double ttotal=0,tcomp=0,tconv=0,total_time,comp_time,conv_time;
 
 		double ** U, ** u_current, ** u_previous, ** swap; //Global matrix, local current and previous matrices, pointer to swap between current and previous
 		
-		gettimeofday(&tts,NULL);
+		//MPI_Status *status;
+		MPI_Request request[64];
+
+		
 
 		MPI_Init(&argc,&argv);
 		MPI_Comm_size(MPI_COMM_WORLD,&size);
@@ -72,6 +75,19 @@ int main(int argc, char ** argv) {
 		if (rank==0) {
 				U=allocate2d(global_padded[0],global_padded[1]);   
 				init2d(U,global[0],global[1]);
+/*
+				status=(MPI_Status *)malloc(sizeof(MPI_Status)*size);
+				if(status==NULL) {
+					perror("malloc 1");
+					exit(1);
+				}
+
+        		request=(MPI_Request *)malloc((size-1)*sizeof(MPI_Request));
+				if(request==NULL) {
+					perror("malloc request");
+					exit(1);
+				}
+*/
 		}
 
 		//----Allocate local 2D-subdomains u_current, u_previous----//
@@ -79,7 +95,8 @@ int main(int argc, char ** argv) {
 
 		u_previous=allocate2d(local[0]+2,local[1]+2);
 		u_current=allocate2d(local[0]+2,local[1]+2);   
-
+		
+		
 		//----Distribute global 2D-domain from rank 0 to all processes----//
 
 		//----Appropriate datatypes are defined here----//
@@ -120,13 +137,17 @@ int main(int argc, char ** argv) {
 								u_current[i+1][j+1]=U[i][j];
 
 				//Send the corresponding block to each process
-				for(int i=1; i<size; ++i) MPI_Send(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD);
+				for(int i=1; i<size; ++i) MPI_Isend(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, request + i-1);
+
+				if(size>1) MPI_Waitall(size-1, request, MPI_STATUS_IGNORE); //status);
+
 		}
 
-
 		//Each process receives the local data
-		if(rank!=0) MPI_Recv(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																						//&req);
+		if(rank!=0) {
+			MPI_Irecv(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, request+rank);
+			MPI_Wait(request+rank, MPI_STATUS_IGNORE); //status);
+		}																						//&req);
 
 		/**** DEBUG SECTION ****/
 		//if(rank==0) print2d(U, global_padded[0], global_padded[1]);
@@ -140,7 +161,7 @@ int main(int argc, char ** argv) {
 
 		//----Find the 4 neighbors with which a process exchanges messages----//
 
-		int north, south, east, west;
+		int north, south, east, west, reqcount;
 		
 		north = south = east = west = -1;
 		if(rank_grid[0]!=0 && rank_grid[1]!=0 && rank_grid[0]!=grid[0]-1 && rank_grid[1]!=grid[1]-1){
@@ -202,13 +223,6 @@ int main(int argc, char ** argv) {
 		MPI_Type_vector(i_max-i_min+1,1,local[1]+2,MPI_DOUBLE,&COL);
 		MPI_Type_commit(&COL);
 		
-
-		/*Fill your code here*/
-
-
-
-
-
 		/*Three types of ranges:
 		  -internal processes
 		  -boundary processes
@@ -216,21 +230,16 @@ int main(int argc, char ** argv) {
 		 */
 
 
-
-
-
 		//************************************//
 
 
-		gettimeofday(&tcs, NULL);
 
 		for(int i=0; i<local[0]+2; ++i)
 			for(int j=0; j<local[1]+2; ++j)
 				u_previous[i][j]=u_current[i][j];
 
-		gettimeofday(&tcf, NULL);
-		tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
+		gettimeofday(&tts,NULL);
 		//----Computational core----//   
 #ifdef TEST_CONV
 		for (t=0;t<T && !global_converged;t++) {
@@ -241,21 +250,25 @@ int main(int argc, char ** argv) {
 				for (t=0;t<T;t++) {
 #endif
 						/*Compute and Communicate*/
-
+				
 						/*Add appropriate timers for computation*/
+			
+						reqcount=0;
 
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
 
-						if(north!=-1) MPI_Send(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD);
-						if(west!=-1) MPI_Send(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD);
+						if(north!=-1) MPI_Isend(&u_previous[1][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(west!=-1) MPI_Isend(&u_previous[1][1], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
 
-						if(south!=-1) MPI_Recv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(east!=-1) MPI_Recv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(south!=-1) MPI_Irecv(&u_previous[i_max][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(east!=-1) MPI_Irecv(&u_previous[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
 
-						if(north!=-1) MPI_Recv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						if(west!=-1) MPI_Recv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+						if(north!=-1) MPI_Irecv(&u_current[0][1], j_max-j_min+1, MPI_DOUBLE, north, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(west!=-1) MPI_Irecv(&u_current[1][0], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+
+						if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
 
 						gettimeofday(&tcs, NULL);
 						//printf("Process[%d]: Alles gut\n", rank); //DEBUG PRINTING
@@ -268,20 +281,24 @@ int main(int argc, char ** argv) {
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
-						if(south!=-1) MPI_Send(&u_current[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD);
-						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
+						reqcount=0;
+
+						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], j_max-j_min+1, MPI_DOUBLE, south, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+
+						if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
 
 #ifdef TEST_CONV
+						gettimeofday(&tconvs, NULL);
 						if (t%C==0) {
-								gettimeofday(&tcs, NULL);
 								/*Test convergence*/
 								converged=converge(u_previous,u_current,local[0]+2,local[1]+2); //Check local convergence
-								gettimeofday(&tcf, NULL);
-								tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 								//MPI_Barrier(MPI_COMM_WORLD); //Wait for all processes to finish
 								//printf("Process[%d]: %d\n", rank, converged); //DEBUG PRINTING
 								MPI_Allreduce(&converged, &global_converged, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD); //global_converged=1 only if all have converged
 						}		
+						gettimeofday(&tconvf, NULL);
+						tconv+=(tconvf.tv_sec-tconvs.tv_sec)+(tconvf.tv_usec-tconvs.tv_usec)*0.000001;
 #endif
 				}
 				
@@ -291,6 +308,7 @@ int main(int argc, char ** argv) {
 
 				MPI_Reduce(&ttotal,&total_time,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
 				MPI_Reduce(&tcomp,&comp_time,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
+				MPI_Reduce(&tconv,&conv_time,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
 
 
 
@@ -301,7 +319,9 @@ int main(int argc, char ** argv) {
 				}
 
 				//Each process sends the local data
-				if(rank!=0) MPI_Send(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD);
+				if(rank!=0) MPI_Isend(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, request+rank);
+				
+				if(size>1) MPI_Wait(request+rank, MPI_STATUS_IGNORE);
 
 				//----Rank 0 gathers the global matrix----//
 				if(rank==0){
@@ -312,7 +332,9 @@ int main(int argc, char ** argv) {
 							U[i][j]=u_current[i+1][j+1];
 
 					//Receive the corresponding block from each process
-					for(int i=1; i<size; ++i) MPI_Recv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					for(int i=1; i<size; ++i) MPI_Irecv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, request+i-1);
+						
+					MPI_Waitall(size-1, request, MPI_STATUS_IGNORE);
 
 				}
 
@@ -321,7 +343,7 @@ int main(int argc, char ** argv) {
 				//**************TODO: Change "Jacobi" to "GaussSeidelSOR" or "RedBlackSOR" for appropriate printing****************//
 				
 				if (rank==0) {
-						printf("Gauss-Seidel X %d Y %d Px %d Py %d Iter %d ComputationTime %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,total_time,U[global[0]/2][global[1]/2]);	
+						printf("Gauss-Seidel X %d Y %d Px %d Py %d Iter %d ComputationTime %lf Convergance Check Time %lf TotalTime %lf midpoint %lf\n",global[0],global[1],grid[0],grid[1],t,comp_time,conv_time,total_time,U[global[0]/2][global[1]/2]);	
 
 
 #ifdef PRINT_RESULTS

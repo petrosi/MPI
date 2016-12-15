@@ -20,7 +20,7 @@ int main(int argc, char ** argv) {
 
 		double ** U, ** u_current, ** u_previous, ** swap; //Global matrix, local current and previous matrices, pointer to swap between current and previous
 		
-		MPI_Request req;
+		MPI_Request request[64];
 		
 		gettimeofday(&tts,NULL);
 
@@ -122,13 +122,18 @@ int main(int argc, char ** argv) {
 								u_current[i+1][j+1]=U[i][j];
 
 				//Send the corresponding block to each process
-				for(int i=1; i<size; ++i) MPI_Isend(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, &req);
-		}
+				     for(int i=1; i<size; ++i) MPI_Isend(&U[0][0]+scatteroffset[i],  1, global_block, i, i, MPI_COMM_WORLD, request + i-1);
 
+                if(size>1) MPI_Waitall(size-1, request, MPI_STATUS_IGNORE); //status);
 
-		//Each process receives the local data
-		if(rank!=0) MPI_Recv(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-																						//&req);
+        }
+
+        //Each process receives the local data
+        if(rank!=0) {
+            MPI_Irecv(&u_current[1][1], 1, local_block, 0, rank, MPI_COMM_WORLD, request+rank);
+            MPI_Wait(request+rank, MPI_STATUS_IGNORE); //status);
+        }                                                                                       //&req);
+
 
 		/**** DEBUG SECTION ****/
 		//if(rank==0) print2d(U, global_padded[0], global_padded[1]);
@@ -142,7 +147,7 @@ int main(int argc, char ** argv) {
 
 		//----Find the 4 neighbors with which a process exchanges messages----//
 
-		int north, south, east, west;
+		int north, south, east, west, reqcount;
 		
 		north = south = east = west = -1;
 		if(rank_grid[0]!=0 && rank_grid[1]!=0 && rank_grid[0]!=grid[0]-1 && rank_grid[1]!=grid[1]-1){
@@ -203,7 +208,7 @@ int main(int argc, char ** argv) {
 		
 
 		MPI_Datatype ROW;
-		MPI_Type_vector(local[1]/2, 1, 2, MPI_DOUBLE, &ROW);
+		MPI_Type_vector((j_max-j_min+1)/2, 1, 2, MPI_DOUBLE, &ROW);
 		MPI_Type_commit(&ROW);
 		MPI_Datatype COL;
 		MPI_Type_vector((i_max-i_min+1)/2, 1, 2*(local[1]+2),MPI_DOUBLE,&COL);
@@ -235,11 +240,21 @@ int main(int argc, char ** argv) {
 
 		gettimeofday(&tcf, NULL);
 		tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
-
+/*
 		if(north!=-1) MPI_Send(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD);
 		if(south!=-1) MPI_Send(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD);
 		if(west!=-1) MPI_Send(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD);
 		if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
+*/
+		//printf("Initial Send\n");
+		reqcount=0;
+		if(north!=-1) MPI_Isend(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD, request+reqcount++);
+	        if(west!=-1) MPI_Isend(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+		if(south!=-1) MPI_Isend(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD, request+reqcount++);
+	        if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+
+		//printf("Process[%d]: Pending Sends=%d\n", rank, reqcount);
+		if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
 
 		//----Computational core----//   
 #ifdef TEST_CONV
@@ -257,13 +272,24 @@ int main(int argc, char ** argv) {
 						swap=u_previous;
 						u_previous=u_current;
 						u_current=swap;
-
+				
+						reqcount=0;
+						//printf("Receiving Black\n");
 						//Receive Black
+						if(south!=-1) MPI_Irecv(&u_previous[i_max][2], 1, ROW, south, 17, MPI_COMM_WORLD, request+reqcount++);
+        					if(east!=-1) MPI_Irecv(&u_previous[2][j_max], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+				        	if(north!=-1) MPI_Irecv(&u_previous[0][1], 1, ROW, north, 17, MPI_COMM_WORLD, request+reqcount++);
+        					if(west!=-1) MPI_Irecv(&u_previous[1][0], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+
+        					if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
+
+/*
 						if(north!=-1) MPI_Recv(&u_previous[0][1], 1, ROW, north, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(south!=-1) MPI_Recv(&u_previous[i_max][2], 1, ROW, south, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(west!=-1) MPI_Recv(&u_previous[1][0], 1, COL, west, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_previous[2][j_max], 1, COL, east, 17, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						
+*/
 						//Compute Red	
 						gettimeofday(&tcs, NULL);
 						for (int i=i_min;i<i_max;i++)
@@ -272,19 +298,37 @@ int main(int argc, char ** argv) {
 									u_current[i][j]=u_previous[i][j]+(omega/4.0)*(u_previous[i-1][j]+u_previous[i+1][j]+u_previous[i][j-1]+u_previous[i][j+1]-4*u_previous[i][j]);            				
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
-
+							
+						//printf("Sending Red\n");
 						//Send Red
+						reqcount=0;
+						if(north!=-1) MPI_Isend(&u_current[1][1], 1, ROW, north, 17, MPI_COMM_WORLD, request+reqcount++);
+	        				if(west!=-1) MPI_Isend(&u_current[1][1], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(south!=-1) MPI_Isend(&u_current[i_max-1][2], 1, ROW, south, 17, MPI_COMM_WORLD, request+reqcount++);
+        					if(east!=-1) MPI_Isend(&u_current[2][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+
+						if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
+/*
 			                        if(north!=-1) MPI_Send(&u_current[1][1], 1, ROW, north, 19, MPI_COMM_WORLD);
                        				if(south!=-1) MPI_Send(&u_current[i_max-1][2], 1, ROW, south, 19, MPI_COMM_WORLD);
                         			if(west!=-1) MPI_Send(&u_current[1][1], 1, COL, west, 19, MPI_COMM_WORLD);
                       				if(east!=-1) MPI_Send(&u_current[2][j_max-1], 1, COL, east, 19, MPI_COMM_WORLD);
-
+*/
+						//printf("Receiving Red\n");
 						//Receive Red
+						reqcount=0;
+						if(south!=-1) MPI_Irecv(&u_current[i_max][1], 1, ROW, south, 17, MPI_COMM_WORLD, request+reqcount++);
+	        				if(east!=-1) MPI_Irecv(&u_current[1][j_max], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+					        if(north!=-1) MPI_Irecv(&u_current[0][2], 1, ROW, north, 17, MPI_COMM_WORLD, request+reqcount++);
+        					if(west!=-1) MPI_Irecv(&u_current[2][0], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+
+        				if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
+/*
 						if(north!=-1) MPI_Recv(&u_current[0][2], 1, ROW, north, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(south!=-1) MPI_Recv(&u_current[i_max][1], 1, ROW, south, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(west!=-1) MPI_Recv(&u_current[2][0], 1, COL, west, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						if(east!=-1) MPI_Recv(&u_current[1][j_max], 1, COL, east, 19, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
+*/						
 						//Compute Black			
 						gettimeofday(&tcs, NULL);
 						for(int i=i_min;i<i_max;i++)
@@ -294,12 +338,21 @@ int main(int argc, char ** argv) {
 						gettimeofday(&tcf, NULL);
 						tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
+						//printf("Sending Black\n");
 						//Send Black
+						reqcount=0;
+						if(north!=-1) MPI_Isend(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD, request+reqcount++);
+	        				if(west!=-1) MPI_Isend(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD, request+reqcount++);
+						if(south!=-1) MPI_Isend(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD, request+reqcount++);
+        					if(east!=-1) MPI_Isend(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD, request+reqcount++);
+
+						if(size>1) MPI_Waitall(reqcount, request, MPI_STATUS_IGNORE);
+/*
 						if(north!=-1) MPI_Send(&u_current[1][2], 1, ROW, north, 17, MPI_COMM_WORLD);
 						if(south!=-1) MPI_Send(&u_current[i_max-1][1], 1, ROW, south, 17, MPI_COMM_WORLD);
 						if(west!=-1) MPI_Send(&u_current[2][1], 1, COL, west, 17, MPI_COMM_WORLD);
 						if(east!=-1) MPI_Send(&u_current[1][j_max-1], 1, COL, east, 17, MPI_COMM_WORLD);
-
+*/
 #ifdef TEST_CONV
 						if (t%C==0) {
 								/*Test convergence*/
@@ -313,7 +366,6 @@ int main(int argc, char ** argv) {
 						}		
 #endif
 				}
-				
 				gettimeofday(&ttf,NULL);
 
 				ttotal=(ttf.tv_sec-tts.tv_sec)+(ttf.tv_usec-tts.tv_usec)*0.000001;
@@ -330,7 +382,9 @@ int main(int argc, char ** argv) {
 				}
 
 				//Each process sends the local data
-				if(rank!=0) MPI_Isend(&u_current[1][1],	1, local_block,	0, rank, MPI_COMM_WORLD, &req);
+				if(rank!=0) MPI_Isend(&u_current[1][1], 1, local_block, 0, rank, MPI_COMM_WORLD, request+rank);
+
+                if(size>1) MPI_Wait(request+rank, MPI_STATUS_IGNORE);
 
 				//----Rank 0 gathers the global matrix----//
 				if(rank==0){
@@ -341,7 +395,9 @@ int main(int argc, char ** argv) {
 							U[i][j]=u_current[i+1][j+1];
 
 					//Receive the corresponding block from each process
-					for(int i=1; i<size; ++i) MPI_Recv(&U[0][0]+scatteroffset[i],	1, global_block, i,	i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					for(int i=1; i<size; ++i) MPI_Irecv(&U[0][0]+scatteroffset[i],  1, global_block, i, i, MPI_COMM_WORLD, request+i-1);
+
+                    MPI_Waitall(size-1, request, MPI_STATUS_IGNORE);
 
 				}
 
